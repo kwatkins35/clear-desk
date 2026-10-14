@@ -90,7 +90,12 @@ ul.list li .meta.due { color: var(--warn); }
 .empty { padding: 22px 4px; color: var(--muted); }
 .due-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 12px 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--mark) 55%, var(--paper)); border: 1.5px solid var(--ink); font-weight: 600; }
 .due-banner[hidden] { display: none; }
-.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 14px; }
+.toast[hidden] { display: none; }
+.shortcut { align-self: flex-start; text-align: left; padding: 8px 0 0; border-top: 1px dashed var(--line); border-radius: 0; width: 100%; color: var(--accent); }
+.shortcut small { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+.shortcut:hover { color: var(--ink); border-color: var(--line); }
+.toast .undo { margin-left: 10px; padding: 3px 10px; background: transparent; color: var(--bg); border-color: currentColor; font-weight: 600; }
+.toast { display: flex; align-items: center; position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 14px; }
 @media (prefers-reduced-motion: no-preference) { .card { transition: border-color .2s; } }
 </style>
 
@@ -149,7 +154,18 @@ let backend = null;
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 1800); }
+function toast(msg, onUndo) {
+  const t = $("toast");
+  t.textContent = msg;
+  if (onUndo) {
+    const u = document.createElement("button");
+    u.className = "undo"; u.textContent = "Undo";
+    u.onclick = () => { t.hidden = true; onUndo(); };
+    t.append(" ", u);
+  }
+  t.hidden = false; clearTimeout(toast.h);
+  toast.h = setTimeout(() => t.hidden = true, onUndo ? 6000 : 1800);
+}
 
 /* ---------- storage: claude db (per-person, private) with a local fallback ---------- */
 const local = {
@@ -368,14 +384,37 @@ if (Speech) {
 }
 
 /* ---------- clarify: the flowchart, one question at a time ---------- */
-function startFlow(item) { flow = { item, step: "actionable", trail: [], action: item.text }; }
-function go(step, crumb) { if (crumb) flow.trail.push(crumb); flow.step = step; renderClarify(); focusFirst(); }
+function startFlow(item) { flow = { item, origin: item, step: "actionable", trail: [], action: item.text, history: [] }; }
+// Each answer saves where you were, so "Back" can return to the previous question.
+let beforeAnswer = null;
+const snapshot = (f) => ({ step: f.step, trail: [...f.trail], action: f.action, item: f.item, unsaved: !!f.unsaved });
+function go(step, crumb) {
+  if (beforeAnswer) flow.history.push(beforeAnswer);
+  if (crumb) flow.trail.push(crumb);
+  flow.step = step; renderClarify(); focusFirst();
+}
+function back() {
+  const f = flow, prev = f.history.pop(); if (!prev) return;
+  const undoingProject = f.unsaved && !prev.unsaved;
+  Object.assign(f, prev);
+  if (undoingProject) put(f.item); // turn the project back into the in-basket item it came from
+  renderClarify(); focusFirst();
+}
 function focusFirst() { setTimeout(() => $("clarify").querySelector("input, button.primary")?.focus(), 0); }
+// After an item is filed (or trashed), Undo puts it back in the in-basket to answer again.
+function undoable(f, filedId) {
+  return () => {
+    if (filedId && filedId !== f.origin.id) del(filedId); // a project's first action
+    startFlow(f.origin);
+    put(f.origin);
+    toast("Back in the in-basket");
+  };
+}
 function finish(changes, msg) {
-  const it = { ...flow.item, ...changes, processed: Date.now() };
+  const f = flow, it = { ...f.item, ...changes, processed: Date.now() };
   flow = null;
   put(it);
-  toast(msg);
+  toast(msg, undoable(f, it.id));
 }
 
 function renderClarify() {
@@ -391,7 +430,7 @@ function renderClarify() {
   }
   const f = flow, t = esc(f.item.text);
   const head = `<div class="row-between"><div class="eyebrow">In-basket · ${inbox.length} to clarify</div>
-    <button class="quiet" data-act="skip">Skip for now</button></div>
+    <span>${f.history.length ? `<button class="quiet" data-act="back">← Back</button>` : ""}<button class="quiet" data-act="skip">Skip for now</button></span></div>
     <div class="item-text">${t}</div>
     ${f.trail.length ? `<div class="trail">${f.trail.map(c => `<span>${esc(c)}</span>`).join("")}</div>` : ""}`;
   const steps = {
@@ -429,7 +468,10 @@ function renderClarify() {
       <input type="date" id="dueDate" value="${localDay()}"></div>
       <div class="choices"><button class="primary" data-act="toCal">Add to Calendar</button></div>`,
   };
-  box.innerHTML = `<div class="card">${head}${steps[f.step]}</div>`;
+  // The shortcut sits at the bottom of the card, under the current question.
+  const shortcut = f.step === "date" ? "" :
+    `<button class="quiet shortcut" data-act="date">Add due date →<small>Skip the questions and put it on the Calendar</small></button>`;
+  box.innerHTML = `<div class="card">${head}${steps[f.step]}${shortcut}</div>`;
 }
 
 $("clarify").addEventListener("keydown", (e) => {
@@ -438,14 +480,16 @@ $("clarify").addEventListener("keydown", (e) => {
 $("clarify").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-act]"); if (!b || !flow) return;
   const f = flow, val = (id) => ($(id)?.value || "").trim();
+  beforeAnswer = snapshot(f);
   switch (b.dataset.act) {
+    case "back": back(); break;
     case "skip": {
       const inbox = byList("inbox"); const i = inbox.findIndex(x => x.id === f.item.id);
       const nxt = inbox[(i + 1) % inbox.length]; startFlow(nxt); renderClarify(); break;
     }
     case "yes": go("multistep", "actionable"); break;
     case "no": go("notactionable", "not actionable"); break;
-    case "trash": flow = null; del(f.item.id); toast("Trashed"); break;
+    case "trash": flow = null; del(f.item.id); toast("Trashed", undoable(f)); break;
     case "someday": finish({ list: "someday" }, "Moved to Someday / maybe"); break;
     case "reference": finish({ list: "reference" }, "Filed in Reference"); break;
     case "single": go("next", "single action"); break;
@@ -469,7 +513,7 @@ $("clarify").addEventListener("click", (e) => {
     case "toWaiting": { const w = val("whoName"); if (!w) return $("whoName").focus();
       finish({ text: f.action, list: "waiting", who: w, since: Date.now() }, "Added to Waiting"); break; }
     case "asap": finish({ text: f.action, list: "next" }, "Added to Next actions"); break;
-    case "date": go("date"); break;
+    case "date": go("date", b.classList.contains("shortcut") ? "straight to calendar" : ""); break;
     case "toCal": { const d = val("dueDate"); if (!d) return;
       finish({ text: f.action, list: "calendar", date: d }, "Added to Calendar"); break; }
   }
