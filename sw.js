@@ -1,6 +1,6 @@
 // Offline support: serve the app from cache, refresh it in the background.
 // Bump VERSION when you upload a new index.html so phones pick it up quickly.
-const VERSION = "clear-desk-v1";
+const VERSION = "clear-desk-v3";
 const FILES = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {

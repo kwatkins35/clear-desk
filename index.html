@@ -83,6 +83,8 @@ ul.list li .meta.due { color: var(--warn); }
 .check { width: 20px; height: 20px; flex: none; margin-top: 2px; border-radius: 50%; border: 1.5px solid var(--muted); background: none; padding: 0; }
 .check:hover { border-color: var(--good); background: color-mix(in srgb, var(--good) 18%, transparent); }
 .empty { padding: 22px 4px; color: var(--muted); }
+.due-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 12px 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--mark) 55%, var(--paper)); border: 1.5px solid var(--ink); font-weight: 600; }
+.due-banner[hidden] { display: none; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 14px; }
 @media (prefers-reduced-motion: no-preference) { .card { transition: border-color .2s; } }
 </style>
@@ -93,12 +95,21 @@ ul.list li .meta.due { color: var(--warn); }
     <div class="row-between">
       <div class="sync" id="sync">connecting…</div>
       <span id="backup" hidden>
+        <button class="quiet" id="emailBtn">Email backup</button>
         <button class="quiet" id="exportBtn">Export backup</button>
         <button class="quiet" id="importBtn">Import</button>
-        <input type="file" id="importFile" accept="application/json" hidden>
+        <input type="file" id="importFile" accept=".csv,text/csv,.json,application/json" hidden>
       </span>
     </div>
   </header>
+
+  <div class="due-banner" id="backupDue" role="status" hidden>
+    <span>Time for your backup.</span>
+    <span class="choices">
+      <button class="primary" id="backupNow">Email backup</button>
+      <button class="quiet" id="backupLater">Not now</button>
+    </span>
+  </div>
 
   <form class="capture" id="captureForm">
     <input type="text" id="captureInput" placeholder="What's on your mind? Capture it…" autocomplete="off" aria-label="Capture to in-basket">
@@ -145,22 +156,135 @@ function startLocal() {
   items = new Map(local.load().map(i => [i.id, i]));
   $("sync").textContent = "saved in this browser";
   $("backup").hidden = false;
+  navigator.storage?.persist?.().catch(() => {}); // ask the browser not to clear this data on its own
   render();
+  checkBackupDue();
 }
-$("exportBtn").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify([...items.values()], null, 2)], { type: "application/json" });
+// Backups are CSV: readable in Excel/Numbers, importable into Notion, and restorable with Import.
+const LIST_LABELS = { inbox: "In-basket", ...Object.fromEntries(LISTS.map(l => [l.id, l.label])) };
+const CSV_COLS = [
+  ["Task", "text"], ["List", "list"], ["Due date", "date"], ["Waiting on", "who"], ["Project", "project"],
+  ["Captured", "created"], ["Done on", "doneAt"], ["Waiting since", "since"], ["Previous list", "prev"], ["ID", "id"],
+];
+const TIME_FIELDS = ["created", "doneAt", "since", "processed"];
+const csvCell = (v) => /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+function toCSV() {
+  const rows = [...items.values()].map(i => CSV_COLS.map(([, k]) => {
+    let v = i[k];
+    if (v == null || v === "") return "";
+    if (k === "list" || k === "prev") v = LIST_LABELS[v] || v;
+    if (TIME_FIELDS.includes(k)) v = new Date(v).toISOString();
+    return csvCell(String(v));
+  }).join(","));
+  return [CSV_COLS.map(c => c[0]).join(","), ...rows].join("\r\n");
+}
+function parseCSV(text) {
+  const rows = []; let row = [], cell = "", q = false;
+  text = text.replace(/^﻿/, "");
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c; }
+    else if (c === '"') q = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; }
+    else cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  const [head, ...body] = rows;
+  const keyFor = Object.fromEntries(CSV_COLS.map(([h, k]) => [h.toLowerCase(), k]));
+  const listFor = Object.fromEntries(Object.entries(LIST_LABELS).map(([id, label]) => [label.toLowerCase(), id]));
+  return body.filter(r => r.some(Boolean)).map(r => {
+    const it = {};
+    head.forEach((h, n) => {
+      const k = keyFor[h.trim().toLowerCase()], v = (r[n] || "").trim();
+      if (!k || !v) return;
+      if (k === "list" || k === "prev") it[k] = listFor[v.toLowerCase()] || v;
+      else if (TIME_FIELDS.includes(k)) it[k] = Date.parse(v) || Date.now();
+      else it[k] = v;
+    });
+    if (!it.id) it.id = uid();
+    if (!it.list) it.list = "inbox";
+    if (!it.created) it.created = Date.now();
+    return it;
+  });
+}
+const localDay = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const backupName = () => "clear-desk-backup-" + localDay() + ".csv";
+const backupFile = () => new File(["﻿" + toCSV()], backupName(), { type: "text/csv" });
+function downloadBackup() {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "clear-desk-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+  a.href = URL.createObjectURL(backupFile());
+  a.download = backupName();
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-});
+}
+// The whole list as plain text, grouped like the tabs, for the body of the email.
+function listAsText() {
+  const groups = [{ id: "inbox", label: "In-basket" }, ...LISTS].map(l => {
+    const rows = byList(l.id);
+    if (!rows.length) return "";
+    return l.label.toUpperCase() + "\n" + rows.map(i => "• " + i.text +
+      (i.date ? "  (" + fmtDate(i.date) + ")" : "") +
+      (i.who ? "  (waiting on " + i.who + ")" : "") +
+      (i.project ? "  [" + i.project + "]" : "")).join("\n");
+  }).filter(Boolean);
+  return "Clear Desk backup, " + new Date().toLocaleString() + "\n\n" +
+    (groups.join("\n\n") || "(empty)") +
+    "\n\nTo restore: open Clear Desk, tap Import, and choose the attached file.";
+}
+/* ---------- backup reminders: due after each 9 AM and 9 PM ---------- */
+const BACKUP_HOURS = [9, 21];
+const store = {
+  get: (k) => { try { return Number(localStorage.getItem(k)) || 0; } catch { return 0; } },
+  set: (k, v) => { try { localStorage.setItem(k, String(v)); } catch {} },
+};
+function lastBackupTime() { // the most recent 9:00 or 21:00 that has already passed
+  const now = new Date(), t = new Date(now);
+  for (let back = 0; back < 2; back++) {
+    for (const h of [...BACKUP_HOURS].reverse()) {
+      t.setHours(h, 0, 0, 0);
+      if (t <= now) return t.getTime();
+    }
+    t.setDate(t.getDate() - 1);
+  }
+  return 0;
+}
+function checkBackupDue() {
+  if (backend !== local) return;
+  const slot = lastBackupTime();
+  const due = store.get("cleardesk-backed-up") < slot && store.get("cleardesk-snoozed") < slot;
+  $("backupDue").hidden = !due;
+}
+function markBackedUp() { store.set("cleardesk-backed-up", Date.now()); checkBackupDue(); }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkBackupDue(); });
+window.addEventListener("focus", checkBackupDue);
+setInterval(checkBackupDue, 60000);
+
+async function emailBackup() {
+  const text = listAsText();
+  const file = backupFile();
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ title: "Clear Desk backup", text, files: [file] }); markBackedUp(); }
+    catch (e) { if (e.name !== "AbortError") toast("Couldn't open the Share menu. Try Export backup."); }
+    return;
+  }
+  // No share menu (some desktop browsers): open an email with the list, and save the file to attach.
+  downloadBackup();
+  markBackedUp();
+  location.href = "mailto:?subject=" + encodeURIComponent("Clear Desk backup") + "&body=" + encodeURIComponent(text.slice(0, 1800));
+  toast("Backup file saved to Downloads. Attach it to the email.");
+}
+$("exportBtn").addEventListener("click", () => { downloadBackup(); markBackedUp(); });
+$("emailBtn").addEventListener("click", emailBackup);
+$("backupNow").addEventListener("click", emailBackup);
+$("backupLater").addEventListener("click", () => { store.set("cleardesk-snoozed", Date.now()); checkBackupDue(); });
 $("importBtn").addEventListener("click", () => $("importFile").click());
 $("importFile").addEventListener("change", async (e) => {
   const file = e.target.files[0]; if (!file) return;
   try {
-    const list = JSON.parse(await file.text());
-    if (!Array.isArray(list)) throw 0;
+    const raw = await file.text();
+    const list = /^\s*\[/.test(raw) ? JSON.parse(raw) : parseCSV(raw);
+    if (!Array.isArray(list) || !list.length) throw 0;
     list.filter(i => i && i.id && i.text).forEach(i => items.set(i.id, i));
     local.save(); render(); toast("Imported " + list.length + " items");
   } catch { toast("That file isn't a Clear Desk backup."); }
@@ -258,7 +382,7 @@ function renderClarify() {
       <button class="primary" data-act="asap">No, as soon as I can<small>Next actions</small></button>
       <button data-act="date">Yes, a specific day<small>Calendar</small></button></div>`,
     date: `<div class="field"><label for="dueDate">Which day?</label>
-      <input type="date" id="dueDate" value="${new Date().toISOString().slice(0, 10)}"></div>
+      <input type="date" id="dueDate" value="${localDay()}"></div>
       <div class="choices"><button class="primary" data-act="toCal">Add to Calendar</button></div>`,
   };
   box.innerHTML = `<div class="card">${head}${steps[f.step]}</div>`;
@@ -310,7 +434,7 @@ $("clarify").addEventListener("click", (e) => {
 /* ---------- lists ---------- */
 function fmtDate(d) {
   if (!d) return "";
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   const label = new Date(d + "T12:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   return d < today ? label + " · overdue" : d === today ? "Today" : label;
 }
@@ -321,7 +445,7 @@ function renderList() {
   const l = LISTS.find(x => x.id === tab), rows = byList(tab);
   const nextFor = (name) => byList("next").concat(byList("calendar"), byList("waiting")).some(i => i.project === name);
   const meta = (i) => {
-    if (tab === "calendar") return `<span class="meta ${i.date < new Date().toISOString().slice(0, 10) ? "due" : ""}">${fmtDate(i.date)}</span>`;
+    if (tab === "calendar") return `<span class="meta ${i.date < localDay() ? "due" : ""}">${fmtDate(i.date)}</span>`;
     if (tab === "waiting") return `<span class="meta">${esc(i.who)} · since ${new Date(i.since || i.created).toLocaleDateString()}</span>`;
     if (tab === "projects") return nextFor(i.text) ? `<span class="meta">has a next action</span>` : `<span class="meta due">needs a next action</span>`;
     if (tab === "done") return `<span class="meta">${new Date(i.doneAt || i.processed || i.created).toLocaleDateString()}</span>`;
