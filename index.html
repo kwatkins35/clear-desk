@@ -44,6 +44,11 @@ h1 span { background: linear-gradient(transparent 58%, var(--mark) 58%); padding
 
 .capture { display: flex; gap: 8px; }
 .capture input { flex: 1; min-width: 0; }
+.mic { display: grid; place-items: center; padding: 0 12px; color: var(--accent); }
+.mic[hidden] { display: none; }
+.mic.listening { background: var(--warn); border-color: var(--warn); color: var(--paper); }
+@media (prefers-reduced-motion: no-preference) { .mic.listening { animation: pulse 1.2s ease-in-out infinite; } }
+@keyframes pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--warn) 25%, transparent); } }
 input[type=text], input[type=date] {
   font: inherit; color: var(--ink); background: var(--paper);
   border: 1.5px solid var(--line); border-radius: 8px; padding: 10px 12px;
@@ -113,6 +118,9 @@ ul.list li .meta.due { color: var(--warn); }
 
   <form class="capture" id="captureForm">
     <input type="text" id="captureInput" placeholder="What's on your mind? Capture it…" autocomplete="off" aria-label="Capture to in-basket">
+    <button type="button" class="mic" id="micBtn" aria-label="Speak to capture" title="Speak to capture" hidden>
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-6a3.5 3.5 0 1 0-7 0v6A3.5 3.5 0 0 0 12 15Zm6-3.5a1 1 0 1 0-2 0 4 4 0 0 1-8 0 1 1 0 1 0-2 0 6 6 0 0 0 5 5.92V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.58a6 6 0 0 0 5-5.92Z"/></svg>
+    </button>
     <button class="primary" type="submit">Capture</button>
   </form>
 
@@ -322,6 +330,42 @@ $("captureForm").addEventListener("submit", (e) => {
   $("captureInput").value = "";
   toast("Added to in-basket");
 });
+
+/* ---------- speak to capture: words fill the box, then it captures when you stop talking ---------- */
+const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (Speech) {
+  const mic = $("micBtn"), input = $("captureInput");
+  let rec = null, heard = "", failed = false;
+  mic.hidden = false;
+  mic.addEventListener("click", () => {
+    if (rec) { rec.stop(); return; } // second tap: stop and capture what was heard
+    rec = new Speech();
+    rec.lang = navigator.language || "en-US";
+    rec.interimResults = true;
+    rec.continuous = false;
+    heard = ""; failed = false;
+    const before = input.value;
+    rec.onstart = () => { mic.classList.add("listening"); mic.setAttribute("aria-label", "Stop listening"); input.placeholder = "Listening…"; };
+    rec.onresult = (e) => {
+      heard = [...e.results].map(r => r[0].transcript).join("").trim();
+      input.value = (before ? before + " " : "") + heard;
+    };
+    rec.onerror = (e) => {
+      failed = true;
+      if (e.error === "not-allowed" || e.error === "service-not-allowed")
+        toast("Microphone is off for Clear Desk. Allow it in Settings, or use the keyboard's mic.");
+      else if (e.error === "no-speech") toast("Didn't catch that. Tap the mic and try again.");
+      else if (e.error !== "aborted") toast("Speech isn't working right now. Use the keyboard's mic instead.");
+    };
+    rec.onend = () => {
+      mic.classList.remove("listening"); mic.setAttribute("aria-label", "Speak to capture");
+      input.placeholder = "What's on your mind? Capture it…";
+      rec = null;
+      if (!failed && heard) $("captureForm").requestSubmit();
+    };
+    try { rec.start(); } catch { rec = null; toast("Speech isn't available here. Use the keyboard's mic instead."); }
+  });
+}
 
 /* ---------- clarify: the flowchart, one question at a time ---------- */
 function startFlow(item) { flow = { item, step: "actionable", trail: [], action: item.text }; }

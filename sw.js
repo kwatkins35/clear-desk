@@ -1,6 +1,6 @@
 // Offline support: serve the app from cache, refresh it in the background.
 // Bump VERSION when you upload a new index.html so phones pick it up quickly.
-const VERSION = "clear-desk-v3";
+const VERSION = "clear-desk-v5";
 const FILES = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
@@ -19,7 +19,8 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
   e.respondWith(
-    fetch(e.request)
+    // "no-cache" makes the browser check with GitHub every time instead of reusing a copy for 10 minutes.
+    fetch(e.request, { cache: "no-cache" })
       .then((res) => {
         const copy = res.clone();
         caches.open(VERSION).then((c) => c.put(e.request, copy));
