@@ -1,0 +1,345 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Clear Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow work column — capture bar, the clarify card, then list tabs. */
+:root {
+  --bg: #eef1f4;
+  --paper: #ffffff;
+  --ink: #1b2430;
+  --muted: #5d6b7a;
+  --line: #d3dae2;
+  --accent: #1d5f8a;
+  --accent-ink: #ffffff;
+  --mark: #ffe76a;
+  --good: #2f7d4f;
+  --warn: #a6541b;
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12171d; --paper: #1a2129; --ink: #e4e9ef; --muted: #93a1b0; --line: #2e3945;
+  --accent: #6db3e3; --accent-ink: #0d1620; --mark: #6b5d12; --good: #6cc391; --warn: #e39a62; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12171d; --paper: #1a2129; --ink: #e4e9ef; --muted: #93a1b0; --line: #2e3945;
+  --accent: #6db3e3; --accent-ink: #0d1620; --mark: #6b5d12; --good: #6cc391; --warn: #e39a62; color-scheme: dark }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); }
+.wrap { max-width: 680px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 64px; display: flex; flex-direction: column; gap: 22px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font: 700 30px/1.1 var(--display); margin: 0; letter-spacing: -0.01em; }
+h1 span { background: linear-gradient(transparent 58%, var(--mark) 58%); padding: 0 2px; }
+.sync { font: 12px var(--mono); color: var(--muted); }
+
+.capture { display: flex; gap: 8px; }
+.capture input { flex: 1; min-width: 0; }
+input[type=text], input[type=date] {
+  font: inherit; color: var(--ink); background: var(--paper);
+  border: 1.5px solid var(--line); border-radius: 8px; padding: 10px 12px;
+}
+input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button { font: 500 14px var(--body); cursor: pointer; border-radius: 8px; padding: 9px 14px; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink); }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.quiet { border-color: transparent; background: transparent; color: var(--muted); padding: 6px 8px; }
+button.quiet:hover { color: var(--ink); }
+
+.card { background: var(--paper); border: 1.5px solid var(--ink); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.eyebrow { font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.item-text { font: 600 19px/1.35 var(--display); text-wrap: balance; overflow-wrap: anywhere; }
+.q { font: 600 16px var(--body); }
+.choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.choices button small { display: block; font: 400 12px var(--body); color: inherit; opacity: 0.75; }
+.choices button { text-align: left; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 13px; color: var(--muted); }
+.trail { display: flex; flex-wrap: wrap; gap: 6px; font: 12px var(--mono); color: var(--muted); }
+.trail span::after { content: "→"; margin-left: 6px; }
+.trail span:last-child::after { content: ""; }
+.row-between { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1.5px solid var(--line); }
+.tabs button { border: 0; border-bottom: 2.5px solid transparent; border-radius: 0; background: none; padding: 8px 10px; white-space: nowrap; color: var(--muted); }
+.tabs button[aria-selected=true] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .n { font: 12px var(--mono); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.hint { color: var(--muted); font-size: 14px; margin: 0; }
+
+ul.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+ul.list li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 2px; border-bottom: 1px solid var(--line); }
+ul.list li .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+ul.list li .meta { display: block; font: 12px var(--mono); color: var(--muted); }
+ul.list li .meta.due { color: var(--warn); }
+.check { width: 20px; height: 20px; flex: none; margin-top: 2px; border-radius: 50%; border: 1.5px solid var(--muted); background: none; padding: 0; }
+.check:hover { border-color: var(--good); background: color-mix(in srgb, var(--good) 18%, transparent); }
+.empty { padding: 22px 4px; color: var(--muted); }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 14px; }
+@media (prefers-reduced-motion: no-preference) { .card { transition: border-color .2s; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1><span>Clear Desk</span></h1>
+    <div class="row-between">
+      <div class="sync" id="sync">connecting…</div>
+      <span id="backup" hidden>
+        <button class="quiet" id="exportBtn">Export backup</button>
+        <button class="quiet" id="importBtn">Import</button>
+        <input type="file" id="importFile" accept="application/json" hidden>
+      </span>
+    </div>
+  </header>
+
+  <form class="capture" id="captureForm">
+    <input type="text" id="captureInput" placeholder="What's on your mind? Capture it…" autocomplete="off" aria-label="Capture to in-basket">
+    <button class="primary" type="submit">Capture</button>
+  </form>
+
+  <section id="clarify"></section>
+
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <section id="listView"></section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const LISTS = [
+  { id: "next", label: "Next actions", hint: "To do as soon as you can." },
+  { id: "calendar", label: "Calendar", hint: "To do on a specific day." },
+  { id: "waiting", label: "Waiting", hint: "Someone else is doing it." },
+  { id: "projects", label: "Projects", hint: "Outcomes that take more than one step. Each should have a next action." },
+  { id: "someday", label: "Someday / maybe", hint: "Not now. Look again at your weekly review." },
+  { id: "reference", label: "Reference", hint: "Kept so you can find it when you need it." },
+  { id: "done", label: "Done", hint: "Finished items." },
+];
+let items = new Map();
+let tab = "next";
+let flow = null; // clarify state for the current inbox item
+let backend = null;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 1800); }
+
+/* ---------- storage: claude db (per-person, private) with a local fallback ---------- */
+const local = {
+  name: "this browser only",
+  load() { try { return JSON.parse(localStorage.getItem("cleardesk") || "[]"); } catch { return []; } },
+  save() { try { localStorage.setItem("cleardesk", JSON.stringify([...items.values()])); } catch {} },
+  async put(it) { items.set(it.id, it); this.save(); render(); },
+  async del(id) { items.delete(id); this.save(); render(); },
+};
+function startLocal() {
+  backend = local;
+  items = new Map(local.load().map(i => [i.id, i]));
+  $("sync").textContent = "saved in this browser";
+  $("backup").hidden = false;
+  render();
+}
+$("exportBtn").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify([...items.values()], null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "clear-desk-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$("importBtn").addEventListener("click", () => $("importFile").click());
+$("importFile").addEventListener("change", async (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  try {
+    const list = JSON.parse(await file.text());
+    if (!Array.isArray(list)) throw 0;
+    list.filter(i => i && i.id && i.text).forEach(i => items.set(i.id, i));
+    local.save(); render(); toast("Imported " + list.length + " items");
+  } catch { toast("That file isn't a Clear Desk backup."); }
+  e.target.value = "";
+});
+async function boot() {
+  render();
+  const [db, user] = await Promise.all([window.claude?.use?.("db"), window.claude?.use?.("user")]).catch(() => []);
+  const id = db && user ? await user.id() : null;
+  if (!db || !id) return startLocal();
+  const col = db.collection("data/users/" + id);
+  backend = {
+    async put(it) { items.set(it.id, it); render(); try { await col.doc(it.id).set(it); } catch (e) { toast(e.code === "quota_exceeded" ? "Storage is full. Clear out some Done items." : "Couldn't save. Try again."); } },
+    async del(i) { items.delete(i); render(); try { await col.doc(i).delete(); } catch { toast("Couldn't delete. Try again."); } },
+  };
+  $("sync").textContent = "loading…";
+  col.onSnapshot(snap => {
+    items = new Map(snap.docs.map(d => [d.id, { ...d.data(), id: d.id }]));
+    $("sync").textContent = "synced · private to you";
+    render();
+  }, () => { $("sync").textContent = "offline — reload to reconnect"; });
+}
+
+const put = (it) => backend ? backend.put(it) : null;
+const del = (id) => backend ? backend.del(id) : null;
+const byList = (l) => [...items.values()].filter(i => i.list === l).sort((a, b) =>
+  l === "calendar" ? String(a.date).localeCompare(String(b.date)) : (a.created || 0) - (b.created || 0));
+
+/* ---------- capture ---------- */
+$("captureForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = $("captureInput").value.trim();
+  if (!text) return;
+  put({ id: uid(), text, list: "inbox", created: Date.now() });
+  $("captureInput").value = "";
+  toast("Added to in-basket");
+});
+
+/* ---------- clarify: the flowchart, one question at a time ---------- */
+function startFlow(item) { flow = { item, step: "actionable", trail: [], action: item.text }; }
+function go(step, crumb) { if (crumb) flow.trail.push(crumb); flow.step = step; renderClarify(); focusFirst(); }
+function focusFirst() { setTimeout(() => $("clarify").querySelector("input, button.primary")?.focus(), 0); }
+function finish(changes, msg) {
+  const it = { ...flow.item, ...changes, processed: Date.now() };
+  flow = null;
+  put(it);
+  toast(msg);
+}
+
+function renderClarify() {
+  const inbox = byList("inbox");
+  const box = $("clarify");
+  if (flow && !flow.unsaved && !items.has(flow.item.id)) flow = null;
+  if (!flow && inbox.length) startFlow(inbox[0]);
+  if (!flow) {
+    box.innerHTML = `<div class="card"><div class="eyebrow">In-basket · 0</div>
+      <div class="item-text">In-basket is empty.</div>
+      <p class="hint">Capture anything that has your attention above. Each item gets clarified here, one question at a time.</p></div>`;
+    return;
+  }
+  const f = flow, t = esc(f.item.text);
+  const head = `<div class="row-between"><div class="eyebrow">In-basket · ${inbox.length} to clarify</div>
+    <button class="quiet" data-act="skip">Skip for now</button></div>
+    <div class="item-text">${t}</div>
+    ${f.trail.length ? `<div class="trail">${f.trail.map(c => `<span>${esc(c)}</span>`).join("")}</div>` : ""}`;
+  const steps = {
+    actionable: `<div class="q">Is it actionable?</div><div class="choices">
+      <button class="primary" data-act="yes">Yes</button><button data-act="no">No</button></div>`,
+    notactionable: `<div class="q">Then where does it go?</div><div class="choices">
+      <button data-act="trash">Trash<small>Delete it</small></button>
+      <button data-act="someday">Someday / maybe<small>Hold for review</small></button>
+      <button data-act="reference">Reference<small>Retrievable when needed</small></button></div>`,
+    multistep: `<div class="q">Is it one action, or a multistep project?</div><div class="choices">
+      <button class="primary" data-act="single">Single action</button>
+      <button data-act="project">Multistep project<small>Plan it, then pick a first step</small></button></div>`,
+    project: `<div class="field"><label for="projName">Project outcome — what does "done" look like?</label>
+      <input type="text" id="projName" value="${t}"></div>
+      <div class="field"><label for="nextAct">What's the very next physical action?</label>
+      <input type="text" id="nextAct" placeholder="e.g. Email Sam for the venue list"></div>
+      <div class="choices"><button class="primary" data-act="projectNext">Continue</button></div>`,
+    next: `<div class="field"><label for="nextAct">What's the next action? Make it concrete.</label>
+      <input type="text" id="nextAct" value="${esc(f.action)}"></div>
+      <div class="choices"><button class="primary" data-act="toTwo">Continue</button></div>`,
+    two: `<div class="q">Will “${esc(f.action)}” take less than 2 minutes?</div><div class="choices">
+      <button class="primary" data-act="under">Yes</button><button data-act="over">No</button></div>`,
+    doit: `<div class="q">Do it now. It's quicker than tracking it.</div><div class="choices">
+      <button class="primary" data-act="did">Done it</button><button data-act="over">It's taking longer</button></div>`,
+    who: `<div class="q">Are you the right person to do it?</div><div class="choices">
+      <button class="primary" data-act="defer">Defer it<small>I'll do it later</small></button>
+      <button data-act="delegate">Delegate it<small>Someone else should</small></button></div>`,
+    delegate: `<div class="field"><label for="whoName">Who are you handing it to?</label>
+      <input type="text" id="whoName" placeholder="Name"></div>
+      <div class="choices"><button class="primary" data-act="toWaiting">Add to Waiting</button></div>`,
+    when: `<div class="q">Does it have to happen on a specific day?</div><div class="choices">
+      <button class="primary" data-act="asap">No, as soon as I can<small>Next actions</small></button>
+      <button data-act="date">Yes, a specific day<small>Calendar</small></button></div>`,
+    date: `<div class="field"><label for="dueDate">Which day?</label>
+      <input type="date" id="dueDate" value="${new Date().toISOString().slice(0, 10)}"></div>
+      <div class="choices"><button class="primary" data-act="toCal">Add to Calendar</button></div>`,
+  };
+  box.innerHTML = `<div class="card">${head}${steps[f.step]}</div>`;
+}
+
+$("clarify").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.matches("input")) { e.preventDefault(); $("clarify").querySelector("button.primary")?.click(); }
+});
+$("clarify").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-act]"); if (!b || !flow) return;
+  const f = flow, val = (id) => ($(id)?.value || "").trim();
+  switch (b.dataset.act) {
+    case "skip": {
+      const inbox = byList("inbox"); const i = inbox.findIndex(x => x.id === f.item.id);
+      const nxt = inbox[(i + 1) % inbox.length]; startFlow(nxt); renderClarify(); break;
+    }
+    case "yes": go("multistep", "actionable"); break;
+    case "no": go("notactionable", "not actionable"); break;
+    case "trash": flow = null; del(f.item.id); toast("Trashed"); break;
+    case "someday": finish({ list: "someday" }, "Moved to Someday / maybe"); break;
+    case "reference": finish({ list: "reference" }, "Filed in Reference"); break;
+    case "single": go("next", "single action"); break;
+    case "project": go("project", "project"); break;
+    case "projectNext": {
+      const name = val("projName") || f.item.text, act = val("nextAct");
+      if (!act) { $("nextAct").focus(); return toast("Name a next action for the project"); }
+      // The inbox item becomes the project; its first action lives only in this flow until it's filed.
+      const project = { ...f.item, text: name, list: "projects", processed: Date.now() };
+      f.unsaved = true;
+      f.item = { id: uid(), text: act, created: Date.now(), project: name };
+      put(project);
+      f.action = act; go("two", "next: " + act); break;
+    }
+    case "toTwo": { const a = val("nextAct"); if (!a) return; f.action = a; go("two"); break; }
+    case "under": go("doit", "< 2 min"); break;
+    case "over": go("who", "> 2 min"); break;
+    case "did": finish({ text: f.action, list: "done", doneAt: Date.now() }, "Done. Nice."); break;
+    case "defer": go("when", "defer"); break;
+    case "delegate": go("delegate", "delegate"); break;
+    case "toWaiting": { const w = val("whoName"); if (!w) return $("whoName").focus();
+      finish({ text: f.action, list: "waiting", who: w, since: Date.now() }, "Added to Waiting"); break; }
+    case "asap": finish({ text: f.action, list: "next" }, "Added to Next actions"); break;
+    case "date": go("date"); break;
+    case "toCal": { const d = val("dueDate"); if (!d) return;
+      finish({ text: f.action, list: "calendar", date: d }, "Added to Calendar"); break; }
+  }
+});
+
+/* ---------- lists ---------- */
+function fmtDate(d) {
+  if (!d) return "";
+  const today = new Date().toISOString().slice(0, 10);
+  const label = new Date(d + "T12:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return d < today ? label + " · overdue" : d === today ? "Today" : label;
+}
+function renderTabs() {
+  $("tabs").innerHTML = LISTS.map(l => `<button role="tab" aria-selected="${l.id === tab}" data-tab="${l.id}">${l.label}<span class="n">${byList(l.id).length}</span></button>`).join("");
+}
+function renderList() {
+  const l = LISTS.find(x => x.id === tab), rows = byList(tab);
+  const nextFor = (name) => byList("next").concat(byList("calendar"), byList("waiting")).some(i => i.project === name);
+  const meta = (i) => {
+    if (tab === "calendar") return `<span class="meta ${i.date < new Date().toISOString().slice(0, 10) ? "due" : ""}">${fmtDate(i.date)}</span>`;
+    if (tab === "waiting") return `<span class="meta">${esc(i.who)} · since ${new Date(i.since || i.created).toLocaleDateString()}</span>`;
+    if (tab === "projects") return nextFor(i.text) ? `<span class="meta">has a next action</span>` : `<span class="meta due">needs a next action</span>`;
+    if (tab === "done") return `<span class="meta">${new Date(i.doneAt || i.processed || i.created).toLocaleDateString()}</span>`;
+    return i.project ? `<span class="meta">project: ${esc(i.project)}</span>` : "";
+  };
+  const canCheck = !["reference", "done", "someday"].includes(tab);
+  $("listView").innerHTML = `<p class="hint">${l.hint}</p>` + (rows.length ? `<ul class="list">${rows.map(i => `<li>
+      ${canCheck ? `<button class="check" data-done="${i.id}" aria-label="Mark done"></button>` : ""}
+      <div class="t">${esc(i.text)}${meta(i)}</div>
+      ${tab === "someday" || tab === "reference" ? `<button class="quiet" data-reclarify="${i.id}">Clarify again</button>` : ""}
+      ${tab === "done" ? `<button class="quiet" data-undo="${i.id}">Undo</button>` : ""}
+      <button class="quiet" data-del="${i.id}" aria-label="Delete">✕</button></li>`).join("")}</ul>`
+    : `<div class="empty">Nothing here yet. Items land here after you clarify them in the in-basket.</div>`);
+}
+$("tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) { tab = b.dataset.tab; renderTabs(); renderList(); } });
+$("listView").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const it = items.get(b.dataset.done || b.dataset.undo || b.dataset.reclarify || b.dataset.del);
+  if (!it) return;
+  if (b.dataset.done) { put({ ...it, list: "done", prev: it.list, doneAt: Date.now() }); toast("Done"); }
+  if (b.dataset.undo) put({ ...it, list: it.prev || "next" });
+  if (b.dataset.reclarify) { put({ ...it, list: "inbox" }); toast("Back in the in-basket"); }
+  if (b.dataset.del) { del(it.id); toast("Deleted"); }
+});
+
+function render() { renderClarify(); renderTabs(); renderList(); }
+boot();
+</script>
